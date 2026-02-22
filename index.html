@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weather App - Geolocation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        
+        * {
+            font-family: 'Inter', sans-serif;
+        }
+        
+        .weather-gradient {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .glass-effect {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .loading-spinner {
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top: 3px solid white;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.5s ease-in;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .weather-icon {
+            font-size: 4rem;
+            animation: float 3s ease-in-out infinite;
+        }
+        
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+        }
+    </style>
+</head>
+<body class="min-h-screen weather-gradient">
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <header class="text-center mb-8">
+            <h1 class="text-4xl md:text-5xl font-bold text-white mb-2">
+                <i class="fas fa-cloud-sun mr-3"></i>Weather App
+            </h1>
+            <p class="text-white/80 text-lg">Get real-time weather based on your location</p>
+        </header>
+
+        <!-- Main Content -->
+        <main class="max-w-4xl mx-auto">
+            <!-- Location Permission Card -->
+            <div id="locationCard" class="glass-effect rounded-2xl p-8 text-white text-center fade-in">
+                <i class="fas fa-map-marker-alt text-5xl mb-4"></i>
+                <h2 class="text-2xl font-semibold mb-4">Enable Location Access</h2>
+                <p class="mb-6 text-white/80">Allow this app to access your location to show accurate weather information</p>
+                <button id="getLocationBtn" class="bg-white text-purple-600 px-8 py-3 rounded-full font-semibold hover:bg-white/90 transition-all duration-300 transform hover:scale-105">
+                    <i class="fas fa-location-arrow mr-2"></i>Get My Location
+                </button>
+            </div>
+
+            <!-- Loading State -->
+            <div id="loadingCard" class="glass-effect rounded-2xl p-8 text-white text-center hidden">
+                <div class="loading-spinner mx-auto mb-4"></div>
+                <p class="text-lg">Getting your location and weather data...</p>
+            </div>
+
+            <!-- Weather Display Card -->
+            <div id="weatherCard" class="glass-effect rounded-2xl p-8 text-white hidden">
+                <!-- Location Info -->
+                <div class="flex justify-between items-start mb-6">
+                    <div>
+                        <h2 id="locationName" class="text-3xl font-bold mb-2">--</h2>
+                        <p id="locationCoords" class="text-white/80">--</p>
+                    </div>
+                    <button id="refreshBtn" class="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-full transition-all duration-300">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+                </div>
+
+                <!-- Current Weather -->
+                <div class="grid md:grid-cols-2 gap-8 mb-8">
+                    <div class="text-center">
+                        <i id="weatherIcon" class="weather-icon mb-4"></i>
+                        <div id="temperature" class="text-6xl font-bold mb-2">--°</div>
+                        <div id="weatherDescription" class="text-xl text-white/80 capitalize">--</div>
+                    </div>
+                    
+                    <div class="space-y-4">
+                        <div class="flex justify-between items-center py-2 border-b border-white/20">
+                            <span class="text-white/80"><i class="fas fa-temperature-high mr-2"></i>Feels Like</span>
+                            <span id="feelsLike" class="font-semibold">--°</span>
+                        </div>
+                        <div class="flex justify-between items-center py-2 border-b border-white/20">
+                            <span class="text-white/80"><i class="fas fa-tint mr-2"></i>Humidity</span>
+                            <span id="humidity" class="font-semibold">--%</span>
+                        </div>
+                        <div class="flex justify-between items-center py-2 border-b border-white/20">
+                            <span class="text-white/80"><i class="fas fa-wind mr-2"></i>Wind Speed</span>
+                            <span id="windSpeed" class="font-semibold">-- m/s</span>
+                        </div>
+                        <div class="flex justify-between items-center py-2 border-b border-white/20">
+                            <span class="text-white/80"><i class="fas fa-compress-arrows-alt mr-2"></i>Pressure</span>
+                            <span id="pressure" class="font-semibold">-- hPa</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Additional Info -->
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                    <div class="bg-white/10 rounded-lg p-3">
+                        <i class="fas fa-sunrise text-2xl mb-2"></i>
+                        <p class="text-sm text-white/80">Sunrise</p>
+                        <p id="sunrise" class="font-semibold">--</p>
+                    </div>
+                    <div class="bg-white/10 rounded-lg p-3">
+                        <i class="fas fa-sunset text-2xl mb-2"></i>
+                        <p class="text-sm text-white/80">Sunset</p>
+                        <p id="sunset" class="font-semibold">--</p>
+                    </div>
+                    <div class="bg-white/10 rounded-lg p-3">
+                        <i class="fas fa-eye text-2xl mb-2"></i>
+                        <p class="text-sm text-white/80">Visibility</p>
+                        <p id="visibility" class="font-semibold">-- km</p>
+                    </div>
+                    <div class="bg-white/10 rounded-lg p-3">
+                        <i class="fas fa-cloud text-2xl mb-2"></i>
+                        <p class="text-sm text-white/80">Cloudiness</p>
+                        <p id="cloudiness" class="font-semibold">--%</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Error Card -->
+            <div id="errorCard" class="glass-effect rounded-2xl p-8 text-white text-center hidden">
+                <i class="fas fa-exclamation-triangle text-5xl mb-4 text-yellow-300"></i>
+                <h2 class="text-2xl font-semibold mb-4">Something went wrong</h2>
+                <p id="errorMessage" class="mb-6 text-white/80">--</p>
+                <button id="retryBtn" class="bg-white text-purple-600 px-8 py-3 rounded-full font-semibold hover:bg-white/90 transition-all duration-300 transform hover:scale-105">
+                    <i class="fas fa-redo mr-2"></i>Try Again
+                </button>
+            </div>
+
+            <!-- Search Section -->
+            <div class="mt-8 text-center">
+                <div class="glass-effect rounded-full p-2 inline-flex">
+                    <input 
+                        type="text" 
+                        id="searchInput" 
+                        placeholder="Search for a city..." 
+                        class="bg-transparent text-white placeholder-white/60 px-4 py-2 outline-none w-64"
+                    >
+                    <button id="searchBtn" class="bg-white text-purple-600 px-6 py-2 rounded-full font-semibold hover:bg-white/90 transition-all duration-300">
+                        <i class="fas fa-search"></i>
+                    </button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
