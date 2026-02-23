@@ -3,12 +3,44 @@ class WeatherApp {
     constructor() {
         this.apiKey = 'e4c72a6760c72b4fbb2e58244bc365cc'; // Replace with your actual API key
         this.baseUrl = 'https://api.openweathermap.org/data/2.5';
+        this.oneCallBaseUrl = 'https://api.openweathermap.org/data/3.0';
+        this.geoBaseUrl = 'https://api.openweathermap.org/geo/1.0';
+        this.units = 'metric'; // 'metric' or 'imperial'
+        this.theme = 'dark'; // 'dark' or 'light'
+        this.favorites = JSON.parse(localStorage.getItem('weatherFavorites')) || [];
+        this.currentLocation = null;
         this.init();
     }
 
     init() {
+        this.loadSavedPreferences();
         this.setupEventListeners();
         this.checkLocationPermission();
+    }
+
+    loadSavedPreferences() {
+        // Load saved theme
+        const savedTheme = localStorage.getItem('weatherTheme');
+        if (savedTheme) {
+            this.theme = savedTheme;
+            this.applyTheme();
+        }
+        
+        // Load saved units
+        const savedUnits = localStorage.getItem('weatherUnits');
+        if (savedUnits) {
+            this.units = savedUnits;
+        }
+    }
+
+    applyTheme() {
+        document.body.className = this.theme === 'dark' ? 
+            'min-h-screen weather-gradient' : 
+            'min-h-screen bg-gradient-to-br from-blue-400 to-blue-600';
+        
+        document.getElementById('themeToggle').innerHTML = this.theme === 'dark' ? 
+            '<i class="fas fa-moon"></i>' : 
+            '<i class="fas fa-sun"></i>';
     }
 
     setupEventListeners() {
@@ -18,6 +50,19 @@ class WeatherApp {
         document.getElementById('searchBtn').addEventListener('click', () => this.searchCity());
         document.getElementById('searchInput').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') this.searchCity();
+        });
+        
+        // New event listeners
+        document.getElementById('unitToggle').addEventListener('click', () => this.toggleUnits());
+        document.getElementById('themeToggle').addEventListener('click', () => this.toggleTheme());
+        document.getElementById('favoriteBtn').addEventListener('click', () => this.toggleFavorite());
+        document.getElementById('favoritesBtn').addEventListener('click', () => this.showFavorites());
+        document.getElementById('mapsBtn').addEventListener('click', () => this.showWeatherMaps());
+        document.getElementById('alertsBtn').addEventListener('click', () => this.showWeatherAlerts());
+        
+        // Close modals
+        document.querySelectorAll('.modal-close').forEach(btn => {
+            btn.addEventListener('click', (e) => this.closeModal(e.target.closest('.modal')));
         });
     }
 
@@ -77,10 +122,13 @@ class WeatherApp {
 
     async fetchWeatherByCoords(lat, lon) {
         try {
-            // Fetch current weather and forecast in parallel
-            const [currentWeatherResponse, forecastResponse] = await Promise.all([
-                fetch(`${this.baseUrl}/weather?lat=${lat}&lon=${lon}&appid=${this.apiKey}&units=metric`),
-                fetch(`${this.baseUrl}/forecast?lat=${lat}&lon=${lon}&appid=${this.apiKey}&units=metric`)
+            this.currentLocation = { lat, lon, name: null };
+            
+            // Fetch current weather, forecast, and alerts in parallel
+            const [currentWeatherResponse, forecastResponse, alertsResponse] = await Promise.all([
+                fetch(`${this.baseUrl}/weather?lat=${lat}&lon=${lon}&appid=${this.apiKey}&units=${this.units}`),
+                fetch(`${this.baseUrl}/forecast?lat=${lat}&lon=${lon}&appid=${this.apiKey}&units=${this.units}`),
+                fetch(`${this.oneCallBaseUrl}/onecall?lat=${lat}&lon=${lon}&appid=${this.apiKey}&exclude=minutely,hourly,daily&units=${this.units}`)
             ]);
             
             if (!currentWeatherResponse.ok || !forecastResponse.ok) {
@@ -90,8 +138,19 @@ class WeatherApp {
             const currentData = await currentWeatherResponse.json();
             const forecastData = await forecastResponse.json();
             
+            // Handle alerts (optional endpoint)
+            let alertsData = null;
+            if (alertsResponse.ok) {
+                alertsData = await alertsResponse.json();
+            }
+            
             this.displayWeather(currentData);
             this.displayForecast(forecastData);
+            this.updateFavoriteButton();
+            
+            if (alertsData && alertsData.alerts) {
+                this.displayWeatherAlerts(alertsData.alerts);
+            }
         } catch (error) {
             console.error('Error fetching weather:', error);
             if (error.message.includes('401')) {
@@ -104,24 +163,48 @@ class WeatherApp {
 
     async fetchWeatherByCity(city) {
         try {
-            // Fetch current weather and forecast in parallel
-            const [currentWeatherResponse, forecastResponse] = await Promise.all([
-                fetch(`${this.baseUrl}/weather?q=${encodeURIComponent(city)}&appid=${this.apiKey}&units=metric`),
-                fetch(`${this.baseUrl}/forecast?q=${encodeURIComponent(city)}&appid=${this.apiKey}&units=metric`)
+            // Get coordinates first
+            const geoResponse = await fetch(`${this.geoBaseUrl}/direct?q=${encodeURIComponent(city)}&limit=1&appid=${this.apiKey}`);
+            
+            if (!geoResponse.ok) {
+                throw new Error(`HTTP error! status: ${geoResponse.status}`);
+            }
+            
+            const geoData = await geoResponse.json();
+            if (geoData.length === 0) {
+                throw new Error('City not found');
+            }
+            
+            const { lat, lon, name, country } = geoData[0];
+            this.currentLocation = { lat, lon, name: `${name}, ${country}` };
+            
+            // Fetch current weather, forecast, and alerts in parallel
+            const [currentWeatherResponse, forecastResponse, alertsResponse] = await Promise.all([
+                fetch(`${this.baseUrl}/weather?lat=${lat}&lon=${lon}&appid=${this.apiKey}&units=${this.units}`),
+                fetch(`${this.baseUrl}/forecast?lat=${lat}&lon=${lon}&appid=${this.apiKey}&units=${this.units}`),
+                fetch(`${this.oneCallBaseUrl}/onecall?lat=${lat}&lon=${lon}&appid=${this.apiKey}&exclude=minutely,hourly,daily&units=${this.units}`)
             ]);
             
             if (!currentWeatherResponse.ok || !forecastResponse.ok) {
-                if (currentWeatherResponse.status === 404 || forecastResponse.status === 404) {
-                    throw new Error('City not found');
-                }
                 throw new Error(`HTTP error! status: ${currentWeatherResponse.status || forecastResponse.status}`);
             }
             
             const currentData = await currentWeatherResponse.json();
             const forecastData = await forecastResponse.json();
             
+            // Handle alerts (optional endpoint)
+            let alertsData = null;
+            if (alertsResponse.ok) {
+                alertsData = await alertsResponse.json();
+            }
+            
             this.displayWeather(currentData);
             this.displayForecast(forecastData);
+            this.updateFavoriteButton();
+            
+            if (alertsData && alertsData.alerts) {
+                this.displayWeatherAlerts(alertsData.alerts);
+            }
         } catch (error) {
             console.error('Error fetching weather:', error);
             if (error.message === 'City not found') {
@@ -139,12 +222,15 @@ class WeatherApp {
         document.getElementById('locationName').textContent = `${data.name}, ${data.sys.country}`;
         document.getElementById('locationCoords').textContent = `${data.coord.lat.toFixed(4)}°, ${data.coord.lon.toFixed(4)}°`;
 
-        // Update current weather
+        // Update current weather with unit conversion
+        const tempUnit = this.units === 'metric' ? '°C' : '°F';
+        const speedUnit = this.units === 'metric' ? 'm/s' : 'mph';
+        
         document.getElementById('temperature').textContent = `${Math.round(data.main.temp)}°`;
         document.getElementById('weatherDescription').textContent = data.weather[0].description;
         document.getElementById('feelsLike').textContent = `${Math.round(data.main.feels_like)}°`;
         document.getElementById('humidity').textContent = `${data.main.humidity}%`;
-        document.getElementById('windSpeed').textContent = `${data.wind.speed} m/s`;
+        document.getElementById('windSpeed').textContent = `${data.wind.speed} ${speedUnit}`;
         document.getElementById('pressure').textContent = `${data.main.pressure} hPa`;
 
         // Update weather icon
@@ -310,6 +396,210 @@ class WeatherApp {
         document.getElementById('loadingCard').classList.add('hidden');
         document.getElementById('weatherCard').classList.add('hidden');
         document.getElementById('errorCard').classList.add('hidden');
+    }
+
+    // New methods for enhanced features
+    
+    toggleUnits() {
+        this.units = this.units === 'metric' ? 'imperial' : 'metric';
+        localStorage.setItem('weatherUnits', this.units);
+        
+        document.getElementById('unitToggle').innerHTML = this.units === 'metric' ? 
+            '<i class="fas fa-thermometer-half"></i> °C' : 
+            '<i class="fas fa-thermometer-half"></i> °F';
+        
+        // Refresh current weather data with new units
+        if (this.currentLocation) {
+            this.fetchWeatherByCoords(this.currentLocation.lat, this.currentLocation.lon);
+        }
+    }
+
+    toggleTheme() {
+        this.theme = this.theme === 'dark' ? 'light' : 'dark';
+        localStorage.setItem('weatherTheme', this.theme);
+        this.applyTheme();
+    }
+
+    toggleFavorite() {
+        if (!this.currentLocation || !this.currentLocation.name) return;
+        
+        const locationName = this.currentLocation.name;
+        const index = this.favorites.findIndex(fav => fav.name === locationName);
+        
+        if (index > -1) {
+            this.favorites.splice(index, 1);
+            this.showNotification('Removed from favorites');
+        } else {
+            this.favorites.push({
+                name: locationName,
+                lat: this.currentLocation.lat,
+                lon: this.currentLocation.lon
+            });
+            this.showNotification('Added to favorites');
+        }
+        
+        localStorage.setItem('weatherFavorites', JSON.stringify(this.favorites));
+        this.updateFavoriteButton();
+    }
+
+    updateFavoriteButton() {
+        if (!this.currentLocation || !this.currentLocation.name) return;
+        
+        const isFavorite = this.favorites.some(fav => fav.name === this.currentLocation.name);
+        const btn = document.getElementById('favoriteBtn');
+        
+        if (isFavorite) {
+            btn.innerHTML = '<i class="fas fa-heart"></i>';
+            btn.classList.add('text-red-500');
+        } else {
+            btn.innerHTML = '<i class="far fa-heart"></i>';
+            btn.classList.remove('text-red-500');
+        }
+    }
+
+    showFavorites() {
+        const modal = document.getElementById('favoritesModal');
+        const container = document.getElementById('favoritesContainer');
+        
+        if (this.favorites.length === 0) {
+            container.innerHTML = '<p class="text-white/70 text-center">No favorites added yet</p>';
+        } else {
+            container.innerHTML = this.favorites.map((fav, index) => `
+                <div class="bg-white/10 rounded-lg p-4 flex justify-between items-center hover:bg-white/20 transition-all">
+                    <div>
+                        <h4 class="font-semibold text-white">${fav.name}</h4>
+                        <p class="text-white/70 text-sm">${fav.lat.toFixed(4)}°, ${fav.lon.toFixed(4)}°</p>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="weatherApp.loadFavorite(${index})" class="bg-white/20 hover:bg-white/30 px-3 py-1 rounded text-white">
+                            <i class="fas fa-cloud"></i>
+                        </button>
+                        <button onclick="weatherApp.removeFavorite(${index})" class="bg-red-500/20 hover:bg-red-500/30 px-3 py-1 rounded text-white">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        modal.classList.remove('hidden');
+    }
+
+    loadFavorite(index) {
+        const favorite = this.favorites[index];
+        this.currentLocation = favorite;
+        this.fetchWeatherByCoords(favorite.lat, favorite.lon);
+        this.closeModal(document.getElementById('favoritesModal'));
+    }
+
+    removeFavorite(index) {
+        this.favorites.splice(index, 1);
+        localStorage.setItem('weatherFavorites', JSON.stringify(this.favorites));
+        this.showFavorites();
+        this.updateFavoriteButton();
+    }
+
+    showWeatherMaps() {
+        if (!this.currentLocation) {
+            this.showNotification('Please load weather data first');
+            return;
+        }
+        
+        const modal = document.getElementById('mapsModal');
+        const mapContainer = document.getElementById('mapContainer');
+        
+        // Create weather map layers
+        const mapTypes = [
+            { name: 'Temperature', layer: 'temp_new', icon: 'fa-thermometer-half' },
+            { name: 'Precipitation', layer: 'precipitation_new', icon: 'fa-cloud-rain' },
+            { name: 'Wind', layer: 'wind_new', icon: 'fa-wind' },
+            { name: 'Pressure', layer: 'pressure_new', icon: 'fa-compress-arrows-alt' }
+        ];
+        
+        mapContainer.innerHTML = mapTypes.map(type => `
+            <div class="bg-white/10 rounded-lg p-4 hover:bg-white/20 transition-all cursor-pointer" onclick="weatherApp.openWeatherMap('${type.layer}')">
+                <div class="text-center">
+                    <i class="fas ${type.icon} text-3xl mb-2 text-white"></i>
+                    <h4 class="font-semibold text-white">${type.name}</h4>
+                    <p class="text-white/70 text-sm">View ${type.name.toLowerCase()} map</p>
+                </div>
+            </div>
+        `).join('');
+        
+        modal.classList.remove('hidden');
+    }
+
+    openWeatherMap(layer) {
+        if (!this.currentLocation) return;
+        
+        const { lat, lon } = this.currentLocation;
+        const zoom = 10;
+        const mapUrl = `https://openweathermap.org/weathermap?basemap=map&cities=true&layer=${layer}&lat=${lat}&lon=${lon}&zoom=${zoom}`;
+        
+        window.open(mapUrl, '_blank');
+    }
+
+    showWeatherAlerts() {
+        if (!this.currentLocation) {
+            this.showNotification('Please load weather data first');
+            return;
+        }
+        
+        const modal = document.getElementById('alertsModal');
+        const alertsContainer = document.getElementById('alertsContainer');
+        
+        // Check if we have alerts data
+        const alertsData = document.getElementById('weatherAlerts');
+        
+        if (!alertsData || alertsData.children.length === 0) {
+            alertsContainer.innerHTML = '<p class="text-white/70 text-center">No weather alerts for this area</p>';
+        } else {
+            alertsContainer.innerHTML = alertsData.innerHTML;
+        }
+        
+        modal.classList.remove('hidden');
+    }
+
+    displayWeatherAlerts(alerts) {
+        const alertsContainer = document.getElementById('weatherAlerts');
+        
+        if (!alerts || alerts.length === 0) {
+            alertsContainer.innerHTML = '';
+            return;
+        }
+        
+        alertsContainer.innerHTML = alerts.map(alert => `
+            <div class="bg-yellow-500/20 border border-yellow-400/50 rounded-lg p-4 mb-3">
+                <div class="flex justify-between items-start mb-2">
+                    <h4 class="font-semibold text-yellow-300">${alert.event}</h4>
+                    <span class="text-yellow-200 text-sm">${new Date(alert.start * 1000).toLocaleDateString()}</span>
+                </div>
+                <p class="text-white/90 text-sm">${alert.description}</p>
+                ${alert.sender_name ? `<p class="text-white/70 text-xs mt-2">Source: ${alert.sender_name}</p>` : ''}
+            </div>
+        `).join('');
+        
+        // Show alerts indicator
+        const alertsBtn = document.getElementById('alertsBtn');
+        alertsBtn.classList.add('text-yellow-400');
+    }
+
+    closeModal(modal) {
+        if (modal) {
+            modal.classList.add('hidden');
+        }
+    }
+
+    showNotification(message) {
+        const notification = document.createElement('div');
+        notification.className = 'fixed top-4 right-4 bg-white/90 backdrop-blur-sm text-gray-800 px-6 py-3 rounded-lg shadow-lg z-50 fade-in';
+        notification.textContent = message;
+        
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+            notification.remove();
+        }, 3000);
     }
 }
 

@@ -14,7 +14,11 @@
         }
         
         .weather-gradient {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4c1d95 100%);
+        }
+        
+        .weather-gradient-light {
+            background: linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%);
         }
         
         .glass-effect {
@@ -55,6 +59,19 @@
             0%, 100% { transform: translateY(0px); }
             50% { transform: translateY(-10px); }
         }
+        
+        .modal {
+            backdrop-filter: blur(10px);
+        }
+        
+        .notification {
+            animation: slideIn 0.3s ease-out;
+        }
+        
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
     </style>
 </head>
 <body class="min-h-screen weather-gradient">
@@ -65,6 +82,28 @@
                 <i class="fas fa-cloud-sun mr-3"></i>Weather App
             </h1>
             <p class="text-white/80 text-lg">Get real-time weather based on your location</p>
+            
+            <!-- Control Buttons -->
+            <div class="flex justify-center gap-4 mt-6">
+                <button id="unitToggle" class="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-full transition-all duration-300 text-white">
+                    <i class="fas fa-thermometer-half"></i> °C
+                </button>
+                <button id="themeToggle" class="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-full transition-all duration-300 text-white">
+                    <i class="fas fa-moon"></i>
+                </button>
+                <button id="favoriteBtn" class="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-full transition-all duration-300 text-white">
+                    <i class="far fa-heart"></i>
+                </button>
+                <button id="favoritesBtn" class="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-full transition-all duration-300 text-white">
+                    <i class="fas fa-star"></i>
+                </button>
+                <button id="mapsBtn" class="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-full transition-all duration-300 text-white">
+                    <i class="fas fa-map"></i>
+                </button>
+                <button id="alertsBtn" class="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-full transition-all duration-300 text-white">
+                    <i class="fas fa-exclamation-triangle"></i>
+                </button>
+            </div>
         </header>
 
         <!-- Main Content -->
@@ -185,9 +224,81 @@
                     </button>
                 </div>
             </div>
+            
+            <!-- Hidden Weather Alerts Container -->
+            <div id="weatherAlerts" class="hidden"></div>
         </main>
+
+        <!-- Favorites Modal -->
+        <div id="favoritesModal" class="modal fixed inset-0 bg-black/50 flex items-center justify-center z-50 hidden">
+            <div class="glass-effect rounded-2xl p-8 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-2xl font-bold text-white">
+                        <i class="fas fa-star mr-2"></i>Favorite Locations
+                    </h3>
+                    <button class="modal-close text-white/70 hover:text-white">
+                        <i class="fas fa-times text-xl"></i>
+                    </button>
+                </div>
+                <div id="favoritesContainer" class="space-y-3">
+                    <!-- Favorites will be inserted here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Weather Maps Modal -->
+        <div id="mapsModal" class="modal fixed inset-0 bg-black/50 flex items-center justify-center z-50 hidden">
+            <div class="glass-effect rounded-2xl p-8 max-w-3xl w-full mx-4 max-h-[80vh] overflow-y-auto">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-2xl font-bold text-white">
+                        <i class="fas fa-map mr-2"></i>Weather Maps
+                    </h3>
+                    <button class="modal-close text-white/70 hover:text-white">
+                        <i class="fas fa-times text-xl"></i>
+                    </button>
+                </div>
+                <div id="mapContainer" class="grid grid-cols-2 gap-4">
+                    <!-- Map options will be inserted here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Weather Alerts Modal -->
+        <div id="alertsModal" class="modal fixed inset-0 bg-black/50 flex items-center justify-center z-50 hidden">
+            <div class="glass-effect rounded-2xl p-8 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-2xl font-bold text-white">
+                        <i class="fas fa-exclamation-triangle mr-2"></i>Weather Alerts
+                    </h3>
+                    <button class="modal-close text-white/70 hover:text-white">
+                        <i class="fas fa-times text-xl"></i>
+                    </button>
+                </div>
+                <div id="alertsContainer" class="space-y-3">
+                    <!-- Alerts will be inserted here -->
+                </div>
+            </div>
+        </div>
     </div>
 
     <script src="script.js"></script>
+    <script>
+        // Make weatherApp globally accessible for onclick handlers
+        let weatherApp;
+        document.addEventListener('DOMContentLoaded', () => {
+            weatherApp = new WeatherApp();
+            
+            // Register service worker for offline support
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('/sw.js')
+                    .then((registration) => {
+                        console.log('ServiceWorker registration successful with scope: ', registration.scope);
+                    })
+                    .catch((error) => {
+                        console.log('ServiceWorker registration failed: ', error);
+                    });
+            }
+        });
+    </script>
 </body>
 </html>
