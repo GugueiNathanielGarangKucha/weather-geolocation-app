@@ -122,7 +122,19 @@ class WeatherApp {
 
     async fetchWeatherByCoords(lat, lon) {
         try {
-            this.currentLocation = { lat, lon, name: null };
+            // Get location name using reverse geocoding
+            const geoResponse = await fetch(`${this.geoBaseUrl}/reverse?lat=${lat}&lon=${lon}&limit=1&appid=${this.apiKey}`);
+            let locationName = null;
+            
+            if (geoResponse.ok) {
+                const geoData = await geoResponse.json();
+                if (geoData.length > 0) {
+                    const { name, country, state } = geoData[0];
+                    locationName = state ? `${name}, ${state}, ${country}` : `${name}, ${country}`;
+                }
+            }
+            
+            this.currentLocation = { lat, lon, name: locationName };
             
             // Fetch current weather, forecast, and alerts in parallel
             const [currentWeatherResponse, forecastResponse, alertsResponse] = await Promise.all([
@@ -421,9 +433,19 @@ class WeatherApp {
     }
 
     toggleFavorite() {
-        if (!this.currentLocation || !this.currentLocation.name) return;
+        if (!this.currentLocation) {
+            this.showNotification('Please load weather data first');
+            return;
+        }
         
-        const locationName = this.currentLocation.name;
+        // Use the displayed location name if currentLocation.name is null
+        const locationName = this.currentLocation.name || document.getElementById('locationName').textContent;
+        
+        if (!locationName || locationName === '--') {
+            this.showNotification('Location information not available');
+            return;
+        }
+        
         const index = this.favorites.findIndex(fav => fav.name === locationName);
         
         if (index > -1) {
